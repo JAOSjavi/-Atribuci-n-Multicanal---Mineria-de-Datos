@@ -1,0 +1,34 @@
+from_state,to_state,count
+(not set),Conversion,14
+(not set),Non_Conversion,46
+Start,(not set),60
+Start,direct_traffic,499
+Start,display,118
+Start,email,493
+Start,organic_search,2296
+Start,other,150
+Start,other_publicities,65
+Start,paid_search,1586
+Start,referral,284
+Start,social,1350
+Start,unknown,1099
+direct_traffic,Conversion,56
+direct_traffic,Non_Conversion,443
+display,Conversion,6
+display,Non_Conversion,112
+email,Conversion,15
+email,Non_Conversion,478
+organic_search,Conversion,271
+organic_search,Non_Conversion,2025
+other,Conversion,4
+other,Non_Conversion,146
+other_publicities,Conversion,3
+other_publicities,Non_Conversion,62
+paid_search,Conversion,195
+paid_search,Non_Conversion,1391
+referral,Conversion,24
+referral,Non_Conversion,260
+social,Conversion,75
+social,Non_Conversion,1275
+unknown,Conversion,179
+unknown,Non_Conversion,920

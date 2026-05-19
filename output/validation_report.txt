@@ -1,0 +1,12 @@
+REPORTE DE VALIDACIÓN — FASE 5
+==================================================
+Conversiones reales: 842
+P(conv) Markov: 0.1052
+Suma baseline atribuida: 842
+Suma Markov normalizado: 842.0
+Canales con cambio ranking (sensibilidad long_journey): 2
+
+Top 3 Removal Effect:
+  unknown: 8.72%
+  organic_search: 4.89%
+  paid_search: 4.16%

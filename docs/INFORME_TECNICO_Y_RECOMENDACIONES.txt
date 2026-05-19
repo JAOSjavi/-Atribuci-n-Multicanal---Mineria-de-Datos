@@ -1,0 +1,690 @@
+================================================================================
+  INFORME TECNICO DE ENTREGA - PROYECTO ATRIBUCION MULTICANAL
+  Dataset: Olist Marketing Funnel (Kaggle)
+  Metodologia: CRISP-DM + Cadenas de Markov
+  Fases cubiertas: 1 - Business Understanding
+                   2 - Data Understanding
+                   3 - Data Preparation
+================================================================================
+
+INDICE
+------
+  1. Contexto del proyecto
+  2. Inventario de archivos entregados
+  3. Fase 1 - Que se hizo y por que
+  4. Fase 2 - Que se hizo y por que
+  5. Fase 3 - Que se hizo y por que
+  6. Hallazgos criticos
+  7. Recomendaciones tecnicas (Fases 4-6)
+  8. Recomendaciones de negocio
+  9. Advertencias y riesgos
+
+
+================================================================================
+ 1. CONTEXTO DEL PROYECTO
+================================================================================
+
+PROBLEMA QUE RESUELVE
+  Cuando una empresa invierte en multiples canales de marketing (Google Ads,
+  SEO, redes sociales, email, etc.) surge siempre la misma pregunta: que canal
+  merece el credito cuando un cliente convierte?
+
+  Los modelos clasicos (First-Touch, Last-Touch, Linear) responden de forma
+  arbitraria con reglas fijas que no reflejan la realidad del proceso de
+  decision. Este proyecto construye un modelo estadistico basado en Cadenas
+  de Markov que calcula el valor real de cada canal mediante el "Removal
+  Effect": cuantas conversiones perderia el negocio si ese canal dejara de
+  existir.
+
+SOBRE EL DATASET
+  Olist es un marketplace B2B brasileno que conecta pequenos vendedores con
+  grandes plataformas de e-commerce. Este dataset de Kaggle captura el funnel
+  de adquisicion de nuevos sellers durante junio 2017 a noviembre 2018.
+
+  Dos archivos fuente:
+    - olist_marketing_qualified_leads_dataset.csv: 8.000 leads calificados
+    - olist_closed_deals_dataset.csv: 842 conversiones cerradas
+
+  Tasa de conversion global: 10,53%
+
+FLUJO DEL FUNNEL
+  Usuario --> [canal de marketing] --> Landing Page --> Formulario
+  --> MQL --> Calificacion SDR --> Negociacion SR --> DEAL (conversion)
+
+
+================================================================================
+ 2. INVENTARIO DE ARCHIVOS ENTREGADOS
+================================================================================
+
+ARCHIVOS FUENTE (no modificar)
+  olist_marketing_qualified_leads_dataset.csv  - Dataset de MQLs original
+  olist_closed_deals_dataset.csv               - Dataset de deals original
+
+NOTEBOOK PRINCIPAL
+  Atribucion_Multicanal_Fases_1_2_3.ipynb      - Jupyter notebook ejecutable
+                                                  con las 3 fases completas,
+                                                  43 celdas (18 codigo + 25
+                                                  documentacion)
+
+SCRIPT GENERADOR
+  create_notebook.py                            - Script Python que genera el
+                                                  notebook. Ejecutar si se
+                                                  necesita regenerar el .ipynb
+
+OUTPUTS GENERADOS (listos para Fase 4)
+  journeys_dataset.csv           - 8.000 MQLs con journey_str y flags
+                                   Columnas clave:
+                                     mql_id, first_contact_date, origin,
+                                     won_date, converted, lead_time_days,
+                                     long_journey, journey_str
+                                   Uso: analisis adicional, filtros
+
+  transition_matrix_probs.csv    - Matriz de transicion (PROBABILIDADES)
+                                   Indice: estado de origen (from_state)
+                                   Columnas: estado de destino (to_state)
+                                   Valores: probabilidad 0 a 1
+                                   Uso: INPUT DIRECTO del modelo Markov Fase 4
+
+  transition_matrix_counts.csv   - Misma matriz en CONTEOS (no probabilidades)
+                                   Uso: auditoria y verificacion
+
+  transition_counts.csv          - Pares from_state / to_state con su conteo
+                                   Uso: trazabilidad de calculos
+
+  channel_summary.csv            - Resumen por canal: total MQLs,
+                                   conversiones, tasa de conversion
+                                   Uso: referencia rapida, presentaciones
+
+VISUALIZACIONES GENERADAS
+  fig_nulls.png                  - Analisis de valores nulos por dataset
+  fig_channel_distribution.png   - Distribucion de MQLs por canal
+  fig_conversion_rates.png       - Tasa de conversion por canal
+  fig_volume_vs_rate.png         - Scatter volumen vs tasa de conversion
+  fig_monthly_trends.png         - Tendencias mensuales de MQLs y deals
+  fig_lead_time.png              - Distribucion del tiempo de conversion
+  fig_segments.png               - Segmentos de negocio en deals
+  fig_transition_matrix.png      - Heatmap de la matriz de transicion
+
+DOCUMENTACION
+  GLOSARIO.txt                   - Terminos tecnicos del proyecto
+  INFORME_TECNICO_Y_RECOMENDACIONES.txt  - Este archivo
+
+COMO EJECUTAR EL NOTEBOOK
+  1. Abrir Atribucion_Multicanal_Fases_1_2_3.ipynb en Jupyter o VS Code
+  2. Asegurarse de que los CSV fuente esten en el mismo directorio
+  3. Ejecutar todas las celdas en orden (Kernel > Restart & Run All)
+  4. Los archivos de output se regeneran automaticamente
+
+
+================================================================================
+ 3. FASE 1 - QUE SE HIZO Y POR QUE
+================================================================================
+
+OBJETIVO DE ESTA FASE
+  Definir el marco de trabajo antes de tocar datos. Sin estas decisiones
+  documentadas, cualquier eleccion posterior (que filtrar, que contar como
+  conversion) se toma bajo presion durante el modelado y con sesgos.
+
+---
+
+DECISION 1: DEFINICION DE CONVERSION
+
+  QUE SE DEFINIO:
+    Un MQL convirtio si su mql_id aparece en closed_deals con won_date
+    registrada. Esa es la unica condicion de conversion del modelo.
+
+  POR QUE ASI:
+    El dataset tiene una tabla de hechos limpia (closed_deals) que actua como
+    ground truth. No hay ambiguedad: o el deal esta ahi o no. Definiciones
+    mas complejas (ej: solo contar deals con declaracion de ingresos > X)
+    habrian requerido supuestos que no se pueden verificar con estos datos,
+    y habrian reducido el dataset a 842 menos los que tienen esa columna vacia
+    (que es el 91,8% de los casos).
+
+---
+
+DECISION 2: TRATAMIENTO DE ORIGINS VACIOS
+
+  QUE SE HIZO:
+    Los 60 registros con origin vacio se etiquetaron como "(not set)", no como
+    "unknown" ni se eliminaron.
+
+  POR QUE ASI:
+    "unknown" ya existe como categoria valida en el dataset y significa algo
+    diferente: el sistema detecto trafico pero no pudo clasificarlo. "(not set)"
+    significa ausencia total de dato. Colapsarlos borraria una distincion
+    real. Eliminarlos quitaria 14 conversiones del modelo (tasa del 23,3%)
+    sin justificacion metodologica.
+
+---
+
+DECISION 3: REGLA DE LOS 90 DIAS
+
+  QUE SE HIZO:
+    Los leads con lead_time_days > 90 se mantuvieron en el dataset con un
+    flag long_journey = True. No se filtraron.
+
+  POR QUE ASI:
+    Representan 150 conversiones (17,8% del total). En un funnel B2B con
+    ciclos de venta complejos, 90+ dias es completamente normal. Eliminarlos
+    habria sesgado el modelo hacia canales con conversion rapida (ej: paid
+    search), subestimando canales de generacion de demanda con ciclos mas
+    largos. El flag permite hacer analisis de sensibilidad en Fase 5 sin
+    comprometer la integridad del dataset.
+
+---
+
+DECISION 4: HORIZONTE TEMPORAL
+
+  QUE SE HIZO:
+    No se aplico ningun filtro temporal. Se analizo el dataset completo
+    (junio 2017 - noviembre 2018).
+
+  POR QUE ASI:
+    Filtrar a un periodo mas corto habria reducido el tamano muestral de
+    canales pequenos (display, other_publicities) hasta hacerlos estadisticamente
+    irrelevantes. Con el dataset completo se maximiza la estabilidad de las
+    estimaciones de probabilidad en la matriz de transicion.
+
+---
+
+DECISION 5: METRICA DE EXITO
+
+  QUE SE DEFINIO:
+    Metrica principal: Removal Effect por canal (modelo Markov).
+    Metricas secundarias: ranking de canales, coherencia de la suma de
+    atribuciones vs. conversiones reales, estabilidad en analisis de
+    sensibilidad.
+
+  POR QUE ASI:
+    El Removal Effect es la unica metrica que responde directamente la
+    pregunta de negocio: "si dejamos de invertir en este canal, cuantas
+    ventas perdemos?". Las tasas de conversion simples no responden eso
+    porque no tienen en cuenta el volumen de trafico que cada canal aporta.
+
+
+================================================================================
+ 4. FASE 2 - QUE SE HIZO Y POR QUE
+================================================================================
+
+OBJETIVO DE ESTA FASE
+  Explorar exhaustivamente los datos para entender su estructura real, detectar
+  problemas de calidad, y sobre todo identificar limitaciones que afectan el
+  modelado ANTES de invertir tiempo en construir el modelo.
+
+---
+
+PASO 1: ANALISIS DE ESTRUCTURA Y NULOS
+
+  QUE SE HIZO:
+    Se analizo la completitud de todas las columnas de ambos datasets.
+
+  QUE SE ENCONTRO:
+    En el dataset de MQLs: sin nulos relevantes. Origin tiene 60 vacios
+    (ya tratados como (not set)).
+    En el dataset de deals: 4 columnas con mas del 90% de valores vacios:
+      - has_company:                  92,5% vacio
+      - has_gtin:                     92,4% vacio
+      - average_stock:                92,2% vacio
+      - declared_product_catalog_size: 91,8% vacio
+
+  POR QUE IMPORTA:
+    Esas 4 columnas fueron descartadas del modelo. No se pueden imputar con
+    90%+ de datos faltantes sin inventar informacion. Ademas, son
+    caracteristicas del seller (no del journey de marketing), irrelevantes
+    para la atribucion de canales.
+
+---
+
+PASO 2: DISTRIBUCION DE CANALES
+
+  QUE SE HIZO:
+    Se calculo el volumen de MQLs por canal y se visualizo en grafico de barras.
+
+  QUE SE ENCONTRO:
+    Concentracion alta en 3 canales: organic_search (28,7%), paid_search (19,8%)
+    y social (16,9%) = 65,4% del total. Los 8 canales restantes suman el 34,6%.
+
+  POR QUE IMPORTA:
+    Canales con bajo volumen (display: 118, other_publicities: 65) producen
+    estimaciones de tasa de conversion estadisticamente inestables. Esto
+    se debe tener en cuenta al interpretar sus Removal Effects en Fase 4.
+
+---
+
+PASO 3: TASAS DE CONVERSION POR CANAL
+
+  QUE SE HIZO:
+    Se calculo para cada canal: total MQLs, conversiones, y tasa de conversion.
+    Se comparo contra la media global (10,53%).
+
+  QUE SE ENCONTRO:
+    Canales sobre la media global (10,53%):
+      - (not set):      23,3% - anomalia por tamano pequeno (60 MQLs)
+      - unknown:        16,3% - ALTA CALIDAD, trafico no identificado
+      - paid_search:    12,3% - eficiente y con volumen alto
+      - organic_search: 11,8% - eficiente y es el canal de mayor volumen
+      - direct_traffic: 11,2% - usuarios que ya conocen la marca
+
+    Canales bajo la media global:
+      - referral:           8,5%
+      - social:             5,6% - alto volumen, baja eficiencia
+      - display:            5,1%
+      - other_publicities:  4,6%
+      - email:              3,0% - BAJO RENDIMIENTO, revisar estrategia
+      - other:              2,7% - categoria residual sin valor claro
+
+  POR QUE IMPORTA:
+    La tasa de conversion por canal es el input base de la matriz de
+    transicion. Un canal con alta tasa tiene mayor P(canal --> Conversion)
+    en el modelo Markov, lo que se refleja en un Removal Effect mayor.
+
+---
+
+PASO 4: ANALISIS TEMPORAL
+
+  QUE SE HIZO:
+    Se grafico la generacion mensual de MQLs y la generacion mensual de deals.
+
+  QUE SE ENCONTRO:
+    - Pico de MQLs en abril 2018: 1.352 en un solo mes
+    - Pico de conversiones en abril 2018: 207 deals
+    - El crecimiento de MQLs comienza a acelerarse en octubre 2017
+    - Las conversiones siguen con 2-3 meses de rezago promedio
+
+  POR QUE IMPORTA:
+    El rezago entre generacion y conversion confirma que el lead time medio
+    de 48 dias es real y no un artefacto. Tambien sugiere que el modelo es
+    mas preciso con el dataset completo que con ventanas cortas.
+
+---
+
+PASO 5: ANALISIS DEL TIEMPO DE CONVERSION (LEAD TIME)
+
+  QUE SE HIZO:
+    Se calculo lead_time_days = won_date - first_contact_date para las 842
+    conversiones. Se visualizo la distribucion completa y un zoom 0-180 dias.
+
+  QUE SE ENCONTRO:
+    - Minimo: -2 dias (1 caso - posible error de captura en CRM)
+    - Mediana: 14 dias
+    - Media:   48,4 dias
+    - Maximo:  427 dias
+    - Percentil 90: leads que tardan hasta ~170 dias
+    - Leads > 90 dias: 150 (17,8% de las conversiones)
+
+  POR QUE IMPORTA:
+    La distribucion asimetrica (mediana << media) indica cola derecha larga:
+    la mayoria convierte rapido pero existe un segmento con ciclos de venta
+    muy largos. Este segmento no debe eliminarse sin analisis de sensibilidad.
+
+---
+
+PASO 6: HALLAZGO CRITICO - TOUCHPOINT UNICO
+
+  QUE SE ENCONTRO:
+    El dataset registra UN SOLO touchpoint por lead: el campo origin del MQL.
+    No hay registro de interacciones posteriores del mismo lead con otros
+    canales. Cada journey es siempre: Start --> [un canal] --> Conversion o
+    No-Conversion.
+
+  POR QUE ES CRITICO:
+    Esto hace que los tres modelos clasicos de atribucion sean MATEMATICAMENTE
+    IDENTICOS en este dataset. First-Touch, Last-Touch y Linear asignan
+    exactamente el mismo resultado (100% del credito al unico canal).
+    Solo el Removal Effect de Markov aporta una perspectiva diferente porque
+    compara el canal contra el sistema completo, no solo contra el deal
+    individual.
+
+  QUE SE RECOMIENDA PARA EL FUTURO:
+    Implementar session stitching y UTM tracking completo para capturar
+    multiples interacciones por lead en el sistema de CRM. Ver Seccion 8.
+
+
+================================================================================
+ 5. FASE 3 - QUE SE HIZO Y POR QUE
+================================================================================
+
+OBJETIVO DE ESTA FASE
+  Transformar los datos crudos en la estructura exacta que necesita el modelo
+  de Markov: journeys codificados y una matriz de transicion validada.
+
+---
+
+PASO 1: MERGE DE DATASETS
+
+  QUE SE HIZO:
+    Se unio MQLs con Deals usando mql_id como clave mediante LEFT JOIN.
+    Se agregaron columnas: converted, lead_time_days, long_journey.
+
+  POR QUE LEFT JOIN Y NO INNER JOIN:
+    Un INNER JOIN habria conservado solo los 842 MQLs que convirtieron,
+    eliminando los 7.158 que no convirtieron. Eso es un error grave: las
+    no-conversiones son igualmente necesarias para el modelo Markov porque
+    permiten calcular la probabilidad de falla de cada canal
+    (P(canal --> Non_Conversion)). Sin ellas, el modelo no existe.
+
+  VERIFICACION:
+    df['converted'].sum() == len(deals)  -->  842 == 842  -->  PASS
+
+---
+
+PASO 2: CONSTRUCCION DE JOURNEYS
+
+  QUE SE HIZO:
+    Cada MQL se represento como una cadena de texto con el formato:
+      "Start > [canal] > Conversion"       (si convirtio)
+      "Start > [canal] > Non_Conversion"   (si no convirtio)
+
+    Ejemplos reales:
+      "Start > organic_search > Conversion"
+      "Start > paid_search > Non_Conversion"
+      "Start > (not set) > Conversion"
+
+  POR QUE ESTE FORMATO:
+    Es el formato estandar para alimentar algoritmos de Markov de atribucion.
+    El estado "Start" es necesario como origen comun de todos los journeys,
+    ya que la cadena de Markov necesita un punto de entrada unico para calcular
+    las probabilidades de entrada a cada canal. Sin "Start" no se puede
+    construir la distribucion de trafico entre canales.
+
+    Los estados "Conversion" y "Non_Conversion" son estados absorbentes:
+    representan el final del journey independientemente del camino tomado.
+
+---
+
+PASO 3: CONSTRUCCION DE LA MATRIZ DE TRANSICION
+
+  QUE SE HIZO:
+    De cada journey se extrajeron PARES de transicion:
+      Journey "Start > organic_search > Conversion" produce:
+        - Par 1: Start --> organic_search
+        - Par 2: organic_search --> Conversion
+
+    Con los 8.000 MQLs se obtienen 16.000 pares (2 por journey).
+    Se contaron todos los pares, se pivotaron a una tabla y se normalizaron
+    las filas para obtener probabilidades.
+
+  VERIFICACION DE MATEMATICA:
+    Total transiciones: 16.000 = 8.000 MQLs x 2 transiciones  -->  PASS
+
+  POR QUE SE NORMALIZA POR FILA:
+    La normalizacion convierte conteos brutos en probabilidades reales.
+    Cada fila (estado origen) debe sumar exactamente 1,0 porque el lead
+    SIEMPRE va a alguno de los estados destino posibles.
+    Verificacion: desviacion maxima de las filas respecto a 1,0 = 0.00e+00  -->  PASS
+
+  RESULTADO - LA MATRIZ EN PALABRAS:
+    Fila "Start": distribucion de trafico entre canales
+      Start --> organic_search:  P = 0,287 (28,7% de los leads entran por ahi)
+      Start --> paid_search:     P = 0,198 (19,8%)
+      Start --> social:          P = 0,169 (16,9%)
+      ... etc.
+
+    Fila "organic_search": que pasa con los leads que entraron por ese canal
+      organic_search --> Conversion:     P = 0,118 (11,8% tasa de conversion)
+      organic_search --> Non_Conversion: P = 0,882 (88,2% no convierten)
+
+    Fila "email":
+      email --> Conversion:     P = 0,030 (3,0% tasa de conversion)
+      email --> Non_Conversion: P = 0,970 (97,0% no convierten)
+
+---
+
+PASO 4: VALIDACIONES DE CALIDAD
+
+  RESULTADO: 4/4 VALIDACIONES PASSED
+
+  V1: Conversiones en la matriz == 842 conversiones reales  -->  PASS
+      Garantiza que no se perdio ni se duplic ninguna conversion en el proceso.
+
+  V2: Total transiciones == 8.000 x 2 = 16.000              -->  PASS
+      Garantiza que todos los MQLs estan representados con sus 2 transiciones.
+
+  V3: Filas de probabilidad suman 1,0 (desviacion = 0)      -->  PASS
+      Garantiza que la matriz es matematicamente valida como cadena de Markov.
+
+  V4: Sin origins vacios en el dataset final                 -->  PASS
+      Garantiza que la limpieza de "(not set)" fue aplicada correctamente.
+
+---
+
+PASO 5: GUARDADO DE OUTPUTS
+
+  QUE SE GUARDO:
+    journeys_dataset.csv            - Dataset completo con journeys y flags
+    transition_matrix_probs.csv     - Matriz lista para Fase 4
+    transition_matrix_counts.csv    - Auditoria de conteos
+    transition_counts.csv           - Pares raw de transicion
+    channel_summary.csv             - Resumen por canal
+
+
+================================================================================
+ 6. HALLAZGOS CRITICOS DEL ANALISIS
+================================================================================
+
+HALLAZGO 1 - CANAL "UNKNOWN" ES UNA OPORTUNIDAD OCULTA
+  El canal "unknown" tiene la mayor tasa de conversion entre canales rastreados
+  (16,3%) con 1.099 MQLs. Esto sugiere que hay trafico de alta calidad que
+  el sistema de tracking no puede identificar. Resolver el tracking de este
+  canal podria revelar una fuente valiosa de leads que actualmente se gestiona
+  sin visibilidad. Ver Recomendacion de Negocio 1.
+
+HALLAZGO 2 - EMAIL TIENE EL PEOR RENDIMIENTO
+  Con 493 MQLs y solo 15 conversiones (3,0%), el canal email esta por debajo
+  de la mitad de la tasa de conversion global. Es el cuarto canal en volumen
+  pero el penultimo en eficiencia. Esto sugiere que las listas de contactos
+  no estan segmentadas o que los mensajes no son relevantes para el perfil
+  de seller de Olist. Ver Recomendacion de Negocio 2.
+
+HALLAZGO 3 - SOCIAL ES UN CANAL DE AWARENESS, NO DE CIERRE
+  Con 1.350 MQLs (tercer canal en volumen) y solo 5,6% de tasa de conversion
+  (segunda mas baja), social genera mucho trafico pero pocos deals. Esto es
+  coherente con el comportamiento de las redes sociales: generan conocimiento
+  de marca pero raramente cierran en el primer contacto, especialmente en B2B.
+  No debe medirse por tasa de conversion sino por su contribucion a journeys
+  que terminan en otro canal.
+
+HALLAZGO 4 - ORGANIC SEARCH ES EL CANAL MAS VALIOSO EN TERMINOS ABSOLUTOS
+  Aunque paid_search tiene una tasa de conversion ligeramente superior (12,3%
+  vs 11,8%), organic_search genera 271 conversiones absolutas contra 195 de
+  paid_search. Como canal sin costo por clic, su ROI neto es
+  considerablemente mayor. Cualquier reduccion de inversion en SEO debe
+  analizarse con cuidado.
+
+HALLAZGO 5 - EL DATASET TIENE TOUCHPOINT UNICO (LIMITACION ESTRUCTURAL)
+  Solo hay un canal registrado por lead. Esto no invalida el proyecto pero
+  limita los modelos aplicables. Los modelos clasicos son todos equivalentes.
+  El Removal Effect de Markov sigue siendo valido y util, pero no puede
+  capturar sinergias entre canales (ej: "los leads que pasan por social
+  ANTES de hacer una busqueda organica convierten mas"). Para capturar
+  eso se necesitan datos de multi-touch.
+
+
+================================================================================
+ 7. RECOMENDACIONES TECNICAS (FASES 4-6)
+================================================================================
+
+FASE 4 - MODELADO
+
+  REC-T1: ARCHIVO DE ENTRADA PARA EL MODELO MARKOV
+    Usar transition_matrix_probs.csv como input directo del modelo Markov.
+    La matriz ya esta construida, validada y lista.
+    Estados del modelo: Start (1) + canales (11) + Conversion (1) +
+                        Non_Conversion (1) = 14 estados totales.
+
+  REC-T2: ALGORITMO DE REMOVAL EFFECT - PSEUDOCODIGO
+    Para cada canal C en [organic_search, paid_search, social, ...]:
+      1. Copiar la matriz de transicion completa
+      2. Setear P(Start --> C) = 0 en esa copia
+      3. Renormalizar la fila Start para que sume 1,0
+         (redistribuir el trafico de C entre los canales restantes)
+      4. Calcular la nueva probabilidad global de conversion:
+         P_conv_sin_C = sum(P(Start --> canal_i) * P(canal_i --> Conversion))
+                        para todos los canales i != C
+      5. Removal Effect(C) = (P_conv_total - P_conv_sin_C) / P_conv_total
+
+    P_conv_total (con todos los canales) = 0,1053 (10,53%)
+
+  REC-T3: INTERPRETACION ESPERADA DE RESULTADOS
+    La suma de Removal Effects NO sera 100% - eso es correcto y esperado.
+    Cada Removal Effect es independiente: cuanto cae la conversion si se
+    elimina ESE canal manteniendo el resto activo.
+    Para obtener la "atribucion" en numero de conversiones:
+      Conversiones_atribuidas(C) = Removal_Effect(C) * 842
+
+  REC-T4: CANALES CON BAJO VOLUMEN - TRATAMIENTO ESPECIAL
+    display (118 MQLs) y other_publicities (65 MQLs) tienen estimaciones
+    de tasa de conversion inestables. Se recomienda:
+    a) Calcular intervalos de confianza usando bootstrapping (1000 iteraciones)
+    b) Presentar sus Removal Effects con nota de "baja confianza estadistica"
+    c) No tomar decisiones de presupuesto basadas unicamente en estos canales
+
+  REC-T5: ANALISIS DE SENSIBILIDAD OBLIGATORIO (FASE 5)
+    Ejecutar el modelo Markov DOS veces:
+      - Conjunto A: todos los 8.000 MQLs (long_journey incluidos)
+      - Conjunto B: solo MQLs con lead_time_days <= 90 (7.700 aprox.)
+    Si el ranking de Removal Effect cambia significativamente entre A y B,
+    el modelo es sensible al ciclo de venta y hay que documentarlo como
+    limitacion. Si es estable, el modelo es robusto.
+
+FASE 5 - EVALUACION
+
+  REC-T6: VERIFICACION DE COHERENCIA
+    Validar que la suma de conversiones atribuidas por Removal Effect sea
+    razonablemente cercana a 842. Diferencias grandes indicarian problemas
+    en la normalizacion o en el algoritmo.
+
+  REC-T7: SIMULACION DE ESCENARIOS
+    El valor practico del modelo esta en responder preguntas como:
+      "Si eliminamos display y movemos ese presupuesto a email, que pasa?"
+    Para cada escenario: modificar las probabilidades de Start --> canal,
+    recalcular P_conv_total y comparar contra el escenario base.
+
+FASE 6 - DEPLOYMENT
+
+  REC-T8: VISUALIZACIONES CLAVE PARA EL DASHBOARD
+    - Grafo dirigido de transiciones (nodos = estados, aristas = probabilidades)
+    - Bar chart de Removal Effect por canal (ordenado de mayor a menor)
+    - Tabla comparativa: Tasa de conversion simple vs. Removal Effect
+      (para mostrar donde difieren los dos enfoques)
+    - Simulador interactivo: slider de presupuesto por canal --> proyeccion
+      de conversiones resultantes
+
+  REC-T9: HERRAMIENTAS SUGERIDAS
+    - Visualizacion de grafos: networkx + matplotlib, o plotly para interactivo
+    - Dashboard: Streamlit (rapido de implementar) o Dash
+    - Grafo Sankey del journey: plotly.graph_objects.Sankey
+
+
+================================================================================
+ 8. RECOMENDACIONES DE NEGOCIO
+================================================================================
+
+REC-N1: INVESTIGAR EL CANAL "UNKNOWN" CON URGENCIA
+  El canal unknown tiene la mayor tasa de conversion entre canales rastreados
+  (16,3%) y representa 1.099 MQLs. Actualmente no hay visibilidad sobre que
+  tipo de trafico es. Acciones recomendadas:
+    a) Auditar la configuracion de UTM parameters en todas las campanas
+       activas para reducir el volumen de trafico sin clasificar
+    b) Implementar herramientas de attribution de dark social (ej: Hockeystack,
+       Triple Whale) si se sospecha que es trafico de WhatsApp o DMs
+    c) Analizar las landing pages mas asociadas a este trafico para identificar
+       patrones de procedencia
+
+REC-N2: REVISAR URGENTEMENTE LA ESTRATEGIA DE EMAIL
+  Con 3,0% de tasa de conversion (la segunda mas baja), email esta generando
+  493 MQLs de baja calidad o enviando los mensajes equivocados. Acciones:
+    a) Segmentar las listas por perfil de negocio (business_segment)
+       antes de enviar campanas genericas
+    b) Crear secuencias de nurturing especificas para el ciclo largo de
+       conversion B2B (recordar: mediana de 14 dias, pero media de 48)
+    c) Medir la tasa de apertura y clic de los emails para diagnosticar
+       si el problema es la lista o el contenido
+
+REC-N3: REFORMULAR LAS METRICAS DE EVALUACION DE SOCIAL
+  Social no debe medirse por tasa de conversion (5,6%) sino por su
+  contribucion al awareness y a journeys que eventualmente cierran por
+  otros canales. Con datos de multi-touch se podria medir esto directamente.
+  Por ahora: medir social por costo por MQL, no por costo por deal.
+
+REC-N4: PROTEGER LA INVERSION EN ORGANIC SEARCH (SEO)
+  Es el canal con mayor numero absoluto de conversiones (271) y costo por
+  clic = 0. Cualquier caida en posicionamiento organico tendria un impacto
+  directo en el volumen total de deals. Recomendacion: mantener o aumentar
+  inversion en contenido y SEO tecnico, no recortar para financiar otros
+  canales.
+
+REC-N5: EVALUAR ROI REAL DE PAID SEARCH
+  Paid search tiene la segunda mejor tasa de conversion (12,3%) y 195
+  conversiones absolutas, pero tiene costo por clic. El analisis del Removal
+  Effect en Fase 4 dira exactamente cuanto vale ese canal. Si su Removal
+  Effect es bajo (ej: menos del 15%), podria ser que los leads de paid search
+  hubieran llegado de todas formas por organic search, y el presupuesto de
+  pauta no estaria agregando valor incremental real.
+
+REC-N6: CONSIDERAR IMPLEMENTAR TRACKING MULTI-TOUCHPOINT
+  La limitacion mas grande del modelo actual es el touchpoint unico. Para
+  el siguiente ciclo de analisis se recomienda:
+    a) Implementar session stitching en el CRM: asociar multiples visitas
+       web a un mismo prospecto antes de que complete el formulario
+    b) Registrar todos los touchpoints en el historial del lead (no solo
+       el primero): el email que recibio, el anuncio que vio, la busqueda
+       que hizo antes de convertir
+    c) Con datos multi-touch, el modelo de Markov podra capturar sinergias
+       entre canales y producir atribuciones mucho mas precisas
+
+
+================================================================================
+ 9. ADVERTENCIAS Y RIESGOS
+================================================================================
+
+ADVERTENCIA 1 - CANALES CON BAJO VOLUMEN
+  display (118 MQLs, 6 conversiones) y other_publicities (65 MQLs, 3
+  conversiones) tienen estimaciones estadisticamente inestables. Un solo
+  deal adicional en display moveria su tasa de conversion de 5,1% a 5,9%.
+  NO tomar decisiones de inversion importantes basadas unicamente en los
+  Removal Effects de estos canales sin intervals de confianza.
+
+ADVERTENCIA 2 - CONVERSION CON TIEMPO NEGATIVO
+  Hay 1 conversion con lead_time_days = -2: la won_date es 2 dias ANTERIOR
+  a la first_contact_date. Esto es un error de captura en el CRM (posiblemente
+  el formulario se completo despues del cierre del deal).
+  No afecta el modelo (es 1 caso de 842) pero indica que el sistema de
+  registro tiene inconsistencias que podrian crecer con el tiempo.
+
+ADVERTENCIA 3 - CANAL "(not set)" CON TASA ANOMALA
+  La tasa de conversion del 23,3% en (not set) parece muy alta porque se
+  basa en solo 60 MQLs y 14 conversiones. Con ese tamano de muestra, la
+  tasa real podria estar en un rango amplio (ej: 12%-34% con 95% de
+  confianza). No presentar este dato como un hallazgo solido sin calcular
+  el intervalo de confianza.
+
+ADVERTENCIA 4 - SESGO TEMPORAL
+  El dataset cubre un periodo de crecimiento acelerado para Olist (2017-2018).
+  Los patrones de conversion de ese periodo pueden no ser representativos
+  de periodos mas maduros del negocio. Si se va a usar el modelo para
+  decisiones actuales, validar primero que los canales y tasas del modelo
+  siguen siendo relevantes.
+
+ADVERTENCIA 5 - MODELO DE ORDEN 1
+  El modelo de Markov construido es de ORDEN 1: solo considera el estado
+  actual para predecir el siguiente. Con datos de touchpoint unico esto
+  no es una limitacion (no hay secuencias mas largas que modelar). Pero
+  si en el futuro se obtienen datos multi-touch, considerar si un Markov
+  de orden 2 o 3 mejora la atribucion (ej: "los leads que pasan por social
+  Y LUEGO por organic_search convierten mas que los que solo pasan por
+  organic_search").
+
+
+================================================================================
+  FIN DEL INFORME
+
+  Proyecto:    Atribucion Multicanal - Olist Marketing Funnel
+  Completado:  Fases 1, 2 y 3 de CRISP-DM
+  Pendiente:   Fase 4 (Modelado Markov), Fase 5 (Evaluacion),
+               Fase 6 (Deployment/Dashboard)
+
+  Para consultas sobre este informe, referirse al notebook principal:
+  Atribucion_Multicanal_Fases_1_2_3.ipynb
+================================================================================

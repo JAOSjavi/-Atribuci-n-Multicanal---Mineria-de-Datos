@@ -1,0 +1,13 @@
+from_state,(not set),Conversion,Non_Conversion,direct_traffic,display,email,organic_search,other,other_publicities,paid_search,referral,social,unknown
+(not set),0,14,46,0,0,0,0,0,0,0,0,0,0
+Start,60,0,0,499,118,493,2296,150,65,1586,284,1350,1099
+direct_traffic,0,56,443,0,0,0,0,0,0,0,0,0,0
+display,0,6,112,0,0,0,0,0,0,0,0,0,0
+email,0,15,478,0,0,0,0,0,0,0,0,0,0
+organic_search,0,271,2025,0,0,0,0,0,0,0,0,0,0
+other,0,4,146,0,0,0,0,0,0,0,0,0,0
+other_publicities,0,3,62,0,0,0,0,0,0,0,0,0,0
+paid_search,0,195,1391,0,0,0,0,0,0,0,0,0,0
+referral,0,24,260,0,0,0,0,0,0,0,0,0,0
+social,0,75,1275,0,0,0,0,0,0,0,0,0,0
+unknown,0,179,920,0,0,0,0,0,0,0,0,0,0
